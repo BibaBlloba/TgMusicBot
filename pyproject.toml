@@ -1,0 +1,22 @@
+[project]
+name = "tgmusicbot"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiogram>=3.20.0.post0",
+    "pydantic-settings>=2.9.1",
+    "yt-dlp>=2025.3.31",
+]
+
+[tool.pyright]
+typeCheckingMode = "off"
+venv = ".venv"
+venvPath = "."
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.format]
+quote-style = "single"
