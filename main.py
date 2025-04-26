@@ -1,5 +1,6 @@
 import asyncio
 import os
+from random import randint
 import tempfile
 import yt_dlp
 from config import settings
@@ -88,6 +89,8 @@ async def process_link(callback: types.CallbackQuery, state: FSMContext):
     is_video = callback.data == 'video'
 
     await callback.message.edit_text('щас')
+    chat_id = callback.message.chat.id
+    message_id = callback.message.message_id
 
     try:
         result = await download_media(url, is_video)
@@ -105,7 +108,20 @@ async def process_link(callback: types.CallbackQuery, state: FSMContext):
     except Exception:
         await callback.message.answer('Ошибка: Все по пизде')
     finally:
+        await callback.bot.delete_message(chat_id=chat_id, message_id=message_id)
         await state.clear()
+
+
+@dp.message()
+async def unknown_message(message: types.Message):
+    random_choise = randint(0, 2)
+    match random_choise:
+        case 0:
+            await message.answer('Чо?')
+        case 1:
+            await message.answer('Нипон')
+        case 2:
+            await message.answer('А?')
 
 
 async def main():
