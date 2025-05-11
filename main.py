@@ -1,6 +1,7 @@
 import asyncio
 import os
 from random import randint
+import subprocess
 import tempfile
 import yt_dlp
 from config import settings
@@ -20,6 +21,13 @@ async def download_media(url: str, is_video: bool) -> dict:
             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]'
             if is_video
             else 'bestaudio/best',
+            'coookiefile': 'cookies.txt',
+            # 'geo_bypass': True,
+            # 'geo_bypass_country': 'RU',
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
             'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
             'quiet': True,
             'no_warnings': True,
@@ -47,6 +55,55 @@ async def download_media(url: str, is_video: bool) -> dict:
                         break
                 else:
                     raise FileNotFoundError(f'Не удалось найти файл: {actual_filename}')
+
+            # Проверка размера и сжатие при необходимости
+            max_size = 50 * 1024 * 1024
+            file_size = os.path.getsize(actual_filename)
+
+            if file_size > max_size:
+                compressed_filename = os.path.join(
+                    temp_dir, 'compressed.mp4' if is_video else 'compressed.mp3'
+                )
+
+                if is_video:
+                    cmd = [
+                        'ffmpeg',
+                        '-i',
+                        actual_filename,
+                        '-vf',
+                        'scale=640:-2',
+                        '-c:v',
+                        'libx264',
+                        '-crf',
+                        '28',
+                        '-preset',
+                        'fast',
+                        '-c:a',
+                        'aac',
+                        '-b:a',
+                        '128k',
+                        compressed_filename,
+                    ]
+                else:
+                    cmd = [
+                        'ffmpeg',
+                        '-i',
+                        actual_filename,
+                        '-b:a',
+                        '128k',
+                        '-ac',
+                        '2',
+                        compressed_filename,
+                    ]
+
+                try:
+                    subprocess.run(cmd, check=True)
+                    actual_filename = compressed_filename
+                except subprocess.CalledProcessError as e:
+                    print(f'Ошибка сжатия: {e}')
+                    actual_filename = actual_filename
+            else:
+                actual_filename = actual_filename
 
             with open(actual_filename, 'rb') as f:
                 file_data = f.read()
@@ -93,7 +150,12 @@ async def process_link(callback: types.CallbackQuery, state: FSMContext):
     message_id = callback.message.message_id
 
     try:
-        result = await download_media(url, is_video)
+        try:
+            await callback.message.edit_text('Качаю...')
+            result = await download_media(url, is_video)
+        except Exception as ex:
+            await callback.message.edit_text('Ошибка скачивания :(')
+            print(f'Download Error:\n{ex}')
         file_ext = '.mp4' if is_video else '.mp3'
         file = types.BufferedInputFile(
             result['data'], filename=f'{result["title"]}{file_ext}'
@@ -103,12 +165,15 @@ async def process_link(callback: types.CallbackQuery, state: FSMContext):
             await callback.message.answer_video(file, duration=result['duration'])
         else:
             await callback.message.answer_audio(file, duration=result['duration'])
-    except yt_dlp.DownloadError:
-        await callback.message.answer('Плейлисты не качаю')
-    except Exception:
-        await callback.message.answer('Ошибка: Все по пизде')
-    finally:
         await callback.bot.delete_message(chat_id=chat_id, message_id=message_id)
+    # except yt_dlp.DownloadError:
+    #     await callback.message.answer('Плейлисты не качаю')
+    # except Exception:
+    #     await callback.message.answer('Ошибка: Все по пизде')
+    except Exception as ex:
+        await callback.message.edit_text('Ошибка отправки :(')
+        print(f'Send Error:\n{ex}')
+    finally:
         await state.clear()
 
 
